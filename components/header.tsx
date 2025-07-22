@@ -3,8 +3,8 @@
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Github } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { Button } from "./ui/button";
 
 export default function Header() {
   return (
