@@ -10,12 +10,18 @@ import { Textarea } from "./ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Separator } from "./ui/separator";
+import { chainsToTSender, erc20Abi } from "@/lib/constants";
+import { useAccount, useChainId, useConfig } from "wagmi";
+import { readContract } from "@wagmi/core";
 
 export default function TokenSender() {
   const [mode, setMode] = useState<"safe" | "unsafe">("safe");
   const [tokenAddress, setTokenAddress] = useState("");
   const [recipients, setRecipients] = useState("");
   const [amounts, setAmounts] = useState("");
+  const chainId = useChainId();
+  const config = useConfig();
+  const account = useAccount();
 
   // Mock token details
   const tokenDetails = {
@@ -41,14 +47,42 @@ export default function TokenSender() {
   const totalWei = parsedAmounts.reduce((acc, curr) => acc + curr, 0);
   const totalTokens = totalWei / Math.pow(10, tokenDetails.decimals);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const getApprovedAmount = async(tSenderAddress: string | null): Promise<number> => {
+    if (!tSenderAddress){
+      alert("No T-Sender address found for this chain.");
+      return Promise.resolve(0);
+    }
+
+    // read from chain to see if we've approves enough tokens
+    const response = await readContract(config, {
+      abi: erc20Abi,
+      address: tokenAddress as `0x${string}`,
+      functionName: "allowance",
+      args: [account.address, tSenderAddress as `0x${string}`],
+    });
+
+    return response as number;
+  }
+
+  const handleSubmit = async(e: React.FormEvent) => {
     e.preventDefault();
     // Form submission logic would go here
+    
+    // 1a. if already approved, move to step 2
+    // 1b. If not, approve tsender contract to spend tokens
+    // 2. call the airdrop function on the T-Sender contract
+    // 3. wait for transaction to be mined
+    const tSenderAddress = chainsToTSender[chainId]["tsender"]
+    const approvedAmount = await getApprovedAmount(tSenderAddress);
+
     console.log({
       mode,
       tokenAddress,
       recipients: parsedRecipients,
       amounts: parsedAmounts,
+      tSenderAddress,
+      chainId,
+      approvedAmount
     });
     alert("Transaction submitted!");
   };
