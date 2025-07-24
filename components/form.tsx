@@ -1,7 +1,7 @@
 // components/TokenSender.tsx
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Send, Shield, ShieldAlert } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -13,6 +13,7 @@ import { Separator } from "./ui/separator";
 import { chainsToTSender, erc20Abi } from "@/lib/constants";
 import { useAccount, useChainId, useConfig } from "wagmi";
 import { readContract } from "@wagmi/core";
+import { calculateTotal } from "@/lib/utils";
 
 export default function TokenSender() {
   const [mode, setMode] = useState<"safe" | "unsafe">("safe");
@@ -22,6 +23,10 @@ export default function TokenSender() {
   const chainId = useChainId();
   const config = useConfig();
   const account = useAccount();
+  const { total: totalWei, count } = useMemo(
+    () => calculateTotal(amounts),
+    [amounts]
+  );
 
   // Mock token details
   const tokenDetails = {
@@ -36,19 +41,10 @@ export default function TokenSender() {
     .map((addr) => addr.trim())
     .filter(Boolean);
 
-  // Parse amounts input
-  const parsedAmounts = amounts
-    .split(/[\n,]+/)
-    .map((amt) => amt.trim())
-    .filter(Boolean)
-    .map(Number);
-
-  // Calculate total wei and token amount
-  const totalWei = parsedAmounts.reduce((acc, curr) => acc + curr, 0);
-  const totalTokens = totalWei / Math.pow(10, tokenDetails.decimals);
-
-  const getApprovedAmount = async(tSenderAddress: string | null): Promise<number> => {
-    if (!tSenderAddress){
+  const getApprovedAmount = async (
+    tSenderAddress: string | null
+  ): Promise<number> => {
+    if (!tSenderAddress) {
       alert("No T-Sender address found for this chain.");
       return Promise.resolve(0);
     }
@@ -62,27 +58,27 @@ export default function TokenSender() {
     });
 
     return response as number;
-  }
+  };
 
-  const handleSubmit = async(e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Form submission logic would go here
-    
+
     // 1a. if already approved, move to step 2
     // 1b. If not, approve tsender contract to spend tokens
     // 2. call the airdrop function on the T-Sender contract
     // 3. wait for transaction to be mined
-    const tSenderAddress = chainsToTSender[chainId]["tsender"]
+    const tSenderAddress = chainsToTSender[chainId]["tsender"];
     const approvedAmount = await getApprovedAmount(tSenderAddress);
 
     console.log({
       mode,
       tokenAddress,
       recipients: parsedRecipients,
-      amounts: parsedAmounts,
+      amounts: totalWei,
       tSenderAddress,
       chainId,
-      approvedAmount
+      approvedAmount,
     });
     alert("Transaction submitted!");
   };
@@ -113,7 +109,10 @@ export default function TokenSender() {
                 <Shield className="h-4 w-4 mr-2" />
                 Safe Mode
               </ToggleGroupItem>
-              <ToggleGroupItem value="unsafe" className="hidden md:flex px-4 py-2">
+              <ToggleGroupItem
+                value="unsafe"
+                className="hidden md:flex px-4 py-2"
+              >
                 <ShieldAlert className="h-4 w-4 mr-2" />
                 Unsafe Mode
               </ToggleGroupItem>
@@ -166,7 +165,7 @@ export default function TokenSender() {
                 onChange={(e) => setAmounts(e.target.value)}
               />
               <p className="text-sm text-muted-foreground">
-                {parsedAmounts.length} amount(s) specified
+                {count} amount(s) specified
               </p>
             </div>
 
@@ -179,21 +178,17 @@ export default function TokenSender() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <Label>Token Name</Label>
-                  <p className="font-medium">{tokenDetails.name}</p>
+                  <p className="text-gray-500">{tokenDetails.name}</p>
                 </div>
 
                 <div className="space-y-1">
                   <Label>Amount (wei)</Label>
-                  <p className="font-medium">{totalWei.toLocaleString()}</p>
+                  <p className="text-gray-500">{totalWei.toLocaleString()}</p>
                 </div>
 
                 <div className="space-y-1">
                   <Label>Amount (tokens)</Label>
-                  <p className="font-medium">
-                    {totalTokens.toLocaleString(undefined, {
-                      maximumFractionDigits: 6,
-                    })}
-                  </p>
+                  <p className="text-gray-500">0.29</p>
                 </div>
               </div>
 
@@ -210,7 +205,10 @@ export default function TokenSender() {
             </div>
 
             <div className="pt-4">
-              <Button type="submit" className="w-full py-6 text-lg hover:cursor-pointer">
+              <Button
+                type="submit"
+                className="w-full py-6 text-lg hover:cursor-pointer"
+              >
                 <Send className="h-5 w-5 mr-2" />
                 Send Tokens
               </Button>
