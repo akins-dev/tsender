@@ -10,9 +10,9 @@ import { Textarea } from "./ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Separator } from "./ui/separator";
-import { chainsToTSender, erc20Abi } from "@/lib/constants";
-import { useAccount, useChainId, useConfig } from "wagmi";
-import { readContract } from "@wagmi/core";
+import { chainsToTSender, erc20Abi, tsenderAbi } from "@/lib/constants";
+import { useAccount, useChainId, useConfig, useWriteContract } from "wagmi";
+import { readContract, waitForTransactionReceipt } from "@wagmi/core";
 import { calculateTotal } from "@/lib/utils";
 
 export default function TokenSender() {
@@ -23,23 +23,17 @@ export default function TokenSender() {
   const chainId = useChainId();
   const config = useConfig();
   const account = useAccount();
-  const { total: totalWei, count } = useMemo(
-    () => calculateTotal(amounts),
-    [amounts]
-  );
+  const parsedAmounts = useMemo(() => calculateTotal(amounts), [amounts]);
+  const { data: hash, isPending, writeContractAsync } = useWriteContract();
 
-  // Mock token details
-  const tokenDetails = {
-    name: "T-Sender Token",
-    decimals: 18,
-    balance: "1000000000000000000", // 1 token in wei
-  };
+  const totalWei = parsedAmounts.reduce((acc, curr) => acc + curr, 0);
+  const count = parsedAmounts.length;
 
   // Parse recipients input
   const parsedRecipients = recipients
-    .split(/[\n,]+/)
+    .split(/[,\n]+/)
     .map((addr) => addr.trim())
-    .filter(Boolean);
+    .filter((addr) => addr !== "");
 
   const getApprovedAmount = async (
     tSenderAddress: string | null
@@ -71,15 +65,41 @@ export default function TokenSender() {
     const tSenderAddress = chainsToTSender[chainId]["tsender"];
     const approvedAmount = await getApprovedAmount(tSenderAddress);
 
-    console.log({
-      mode,
-      tokenAddress,
-      recipients: parsedRecipients,
-      amounts: totalWei,
-      tSenderAddress,
-      chainId,
-      approvedAmount,
-    });
+    if (approvedAmount < totalWei) {
+      const approvalhash = await writeContractAsync({
+        abi: erc20Abi,
+        address: tokenAddress as `0x${string}`,
+        functionName: "approve",
+        args: [tSenderAddress as `0x${string}`, BigInt(totalWei)],
+      });
+      const approvalReceipt = await waitForTransactionReceipt(config, {
+        hash: approvalhash,
+      });
+
+      await writeContractAsync({
+        abi: tsenderAbi,
+        address: tSenderAddress as `0x${string}`,
+        functionName: "airdropERC20",
+        args: [
+          tokenAddress as `0x${string}`,
+          parsedRecipients,
+          parsedAmounts,
+          BigInt(totalWei),
+        ],
+      });
+    } else {
+      await writeContractAsync({
+        abi: tsenderAbi,
+        address: tSenderAddress as `0x${string}`,
+        functionName: "airdropERC20",
+        args: [
+          tokenAddress as `0x${string}`,
+          parsedRecipients,
+          parsedAmounts,
+          BigInt(totalWei),
+        ],
+      });
+    }
     alert("Transaction submitted!");
   };
 
@@ -178,7 +198,7 @@ export default function TokenSender() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <Label>Token Name</Label>
-                  <p className="text-gray-500">{tokenDetails.name}</p>
+                  <p className="text-gray-500">T-Sender Token</p>
                 </div>
 
                 <div className="space-y-1">
@@ -188,7 +208,7 @@ export default function TokenSender() {
 
                 <div className="space-y-1">
                   <Label>Amount (tokens)</Label>
-                  <p className="text-gray-500">0.29</p>
+                  <p className="text-gray-500">{parseFloat((totalWei / 1e18).toString())}</p>
                 </div>
               </div>
 

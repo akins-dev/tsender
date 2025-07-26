@@ -1,6 +1,6 @@
 export const calculateTotal = (
   amounts: string
-): { total: number; count: number } => {
+): number[] => {
   // Parse amounts input
   const parsedAmounts = amounts
     .split(/[\n,]+/)
@@ -13,9 +13,5 @@ export const calculateTotal = (
     .filter(Boolean)
     .filter((num) => !isNaN(num)); // Filter out invalid numbers
 
-  // Calculate total wei and token amount
-  const total = parsedAmounts.reduce((acc, curr) => acc + curr, 0);
-  const count = parsedAmounts.length;
-
-  return { total, count };
+  return parsedAmounts;
 };
